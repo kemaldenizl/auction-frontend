@@ -1,36 +1,145 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mezat — canlı açık arttırma frontend'i
 
-## Getting Started
+İki mikroservisin (katalog + açık arttırma) önündeki gateway'e bağlanan Next.js
+uygulaması. Canlı teklif akışı SignalR ile taşınır; sözleşme
+[frontend.md](frontend.md) içinde.
 
-First, run the development server:
+## Kurulum
 
 ```bash
+npm install
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Değişken | Açıklama |
+| --- | --- |
+| `NEXT_PUBLIC_API_URL` | Gateway adresi (varsayılan `http://localhost:5080`). `/api/products`, `/api/auctions` ve `/hubs/auction` yollarını ilgili servise bu dağıtır. Servislerin kendi portlarını (5005 / 5112) kullanmayın. |
+| `NEXT_PUBLIC_SIGNALR_SKIP_NEGOTIATION` | Açık arttırma servisi birden çok replica ile çalışıyorsa `true`. `negotiate` adımını atlar; karşılığında SSE / long polling yedekleri kalkar. |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Gateway CORS'unda `http://localhost:3000` origin'inin ekli olması gerekir.
 
-## Learn More
+## Komutlar
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run dev        # geliştirme sunucusu
+npm run build      # üretim derlemesi
+npm run test       # vitest
+npm run typecheck  # rota tiplerini üretir + tsc
+npm run lint       # eslint
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Dosya yapısı
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Feature-first: her alan kendi tiplerini, API'sini, durumunu ve bileşenlerini
+taşır. `app/` yalnızca rota kompozisyonu yapar, iş mantığı içermez.
 
-## Deploy on Vercel
+```
+src/
+  app/                     rotalar (ince) + site kabuğu
+  features/
+    auction/
+      api/                 REST istemcisi
+      model/               alan tipleri, hub sözleşmesi, oda reducer'ı
+      realtime/            AuctionHub arayüzü + SignalR uygulaması
+      hooks/               useAuctionRoom
+      components/          oda, teklif formu, akış, hub günlüğü, kartlar
+      test-support/        fixture'lar ve sahte hub
+    catalog/               ürünler (api / model / components)
+    bidder/                yerel kimlik (JWT gelene kadar)
+  shared/
+    api/                   http istemcisi, ApiError, Result
+    ui/                    tasarım sistemi
+    lib/                   cn, format, search-params
+    hooks/                 useNow
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Katman kuralı
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`shared` hiçbir feature'ı bilmez. Feature'lar `shared`'ı kullanır; aralarında
+yalnızca `auction → bidder` bağımlılığı vardır (hub URL'i kimlik taşır).
+
+## Tasarım sistemi
+
+Renkler `src/app/globals.css` içinde tek yerde tanımlı: ham CSS değişkenleri,
+karanlık tema için yeniden tanım, sonra `@theme inline` ile Tailwind'e
+`bg-surface` / `text-muted` / `border-line` gibi anlamsal yardımcılar olarak
+açılır. Bileşenler ham renk kullanmaz, bu yüzden palet değişimi hiçbir bileşen
+dosyasına dokunmaz. Primitifler `src/shared/ui`.
+
+## SignalR mimarisi
+
+Üç karar, [frontend.md](frontend.md)'deki üç kuraldan türüyor:
+
+**Durumun kaynağı sunucudur.** `BidPlaced` olayı `amount`, `minimumNextBid` ve
+`bidCount` değerlerini getirir; reducer bunları olduğu gibi yazar. Hiçbir yerde
+fiyat ya da minimum artış hesaplanmaz.
+
+**İlk durum `JoinAuction`'dan gelir.** Oda sayfası sunucu tarafında veri
+çekmez (`src/app/auctions/[id]/page.tsx`). `JoinAuction` hem gruba katar hem
+anlık durumu döner — "önce REST çek, sonra bağlan" arasındaki boşlukta teklif
+kaçma ihtimali yoktur.
+
+**Teklifin sonucu cevap değil olaydır.** `placeBid` yalnızca çağrının
+gittiğini bildirir; kabul `BidPlaced`, ret `BidRejected` olarak döner.
+
+### Parçalar
+
+| Dosya | Sorumluluk |
+| --- | --- |
+| `model/hub-events.ts` | Sunucu → istemci olay sözleşmesi |
+| `model/auction-room.ts` | Saf reducer: tüm durum geçişleri ve seçiciler |
+| `realtime/auction-hub.ts` | `AuctionHub` arayüzü — taşıma dikişi |
+| `realtime/signalr-auction-hub.ts` | Gerçek `HubConnection` uygulaması |
+| `hooks/use-auction-room.ts` | Bağlantı yaşam döngüsünü reducer'a bağlar |
+
+Durum mantığı reducer'da saf tutulduğu için soket olmadan test edilebilir;
+bağlantı davranışı ise `test-support/fake-auction-hub.ts` ile sürülür.
+
+### Tuzaklar ve nerede ele alındıkları
+
+| Tuzak | Çözüm |
+| --- | --- |
+| Yeniden bağlanınca grup üyeliği sıfırlanır | `onReconnected` içinde `JoinAuction` tekrar çağrılır (`use-auction-room.ts`) |
+| StrictMode effect'i iki kez çalıştırır | `start()` promise'i beklenip sonra `stop()` çağrılır |
+| Kapatılan bağlantı hâlâ olay yayar | `disposed` bayrağı ile `emit` susturulur — eski soketin `onclose`'u yeni odaya düşmez |
+| Dinleyicide bayat state | Tüm dinleyiciler `dispatch` eder, state okumaz |
+| `bidder` nesnesi bağımlılıkta | Effect `bidder.id` / `bidder.name` alanlarına bağlıdır |
+| Aynı teklif iki kez | Akış `bidId` ile tekilleştirilir |
+| Handler'dan değer dönmesi | `AuctionHub.on` sarmalayıcısı gövdeyi süslü parantezle çağırır |
+| Bağlanmadan `invoke` | `placeBid` önce `isConnected()` kontrol eder, aksi halde `HubNotReadyError` |
+| Kayık istemci saati | `serverOffsetMs` olay zaman damgasından ölçülür, geri sayım buna göre düzeltilir |
+
+## Veri çekme
+
+`cacheComponents` açık. Önbelleklenmemiş okumalar `<Suspense>` içinde akar, bu
+yüzden kabuk hemen boyanır ve veri sonradan gelir — derleme çıktısında katalog
+ve liste rotaları Partial Prerender olarak işaretlenir.
+
+Beklenen API hataları `attempt()` ile değere çevrilip `ApiErrorPanel` olarak
+yerinde gösterilir (`errorCode` ve `traceId` görünür kalır); `error.tsx`
+yalnızca beklenmeyen hatalar için.
+
+## Kimlik
+
+JWT yok; kimlik `localStorage`'da tutulur ve hub URL'ine query parametresi
+olarak eklenir. Başlıktaki **Yeni kimlik** düğmesi yeni bir `bidderId` üretir:
+ikinci bir sekmede buna basıp teklif verirseniz ilk sekmede `Outbid` uyarısını
+görürsünüz.
+
+JWT eklendiğinde değişecek tek yer `signalr-auction-hub.ts`: query
+parametreleri kalkar, yerine `accessTokenFactory` gelir. Olay sözleşmesi,
+reducer ve bileşenler aynı kalır.
+
+## Testler
+
+```bash
+npm run test
+```
+
+Ağırlık saf birimlerde: oda reducer'ı, HTTP istemcisi, biçimlendirme ve kimlik
+deposu. Bağlantı davranışı (yeniden katılma, kopma, hazır olmayan soket) sahte
+hub ile `use-auction-room.test.tsx` içinde sürülür. Bileşen tarafında teklif
+formu, akış ve geri sayım kapsanır.

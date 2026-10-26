@@ -1,26 +1,152 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Design tokens.
+ *
+ * Every colour is declared once here as a raw CSS variable, redefined for dark
+ * mode, and then exposed to Tailwind through `@theme inline`. Components only
+ * ever reference the semantic utility (`bg-surface`, `text-muted`,
+ * `border-line`) so a palette change never touches a component file.
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --canvas: #f5f6f8;
+  --surface: #ffffff;
+  --surface-muted: #f0f2f5;
+  --line: #e3e6ea;
+  --line-strong: #c8ced7;
+
+  --fg: #0e1217;
+  --fg-muted: #586372;
+  --fg-subtle: #8a93a1;
+
+  --brand: #4338ca;
+  --brand-hover: #3730a3;
+  --brand-fg: #ffffff;
+  --brand-soft: #eceafd;
+
+  --live: #e11d48;
+  --live-soft: #ffe4ea;
+  --success: #047857;
+  --success-soft: #d7f5e9;
+  --warning: #b45309;
+  --warning-soft: #fcefd6;
+  --danger: #dc2626;
+  --danger-soft: #fee2e2;
+  --info: #0369a1;
+  --info-soft: #ddf0fb;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --canvas: #090a0e;
+    --surface: #12141a;
+    --surface-muted: #1a1d25;
+    --line: #262a33;
+    --line-strong: #3b414c;
+
+    --fg: #f1f3f7;
+    --fg-muted: #99a2b1;
+    --fg-subtle: #697182;
+
+    --brand: #8b93f8;
+    --brand-hover: #a5abfb;
+    --brand-fg: #0b0c14;
+    --brand-soft: #1d2043;
+
+    --live: #fb7185;
+    --live-soft: #3d1522;
+    --success: #34d399;
+    --success-soft: #0d2c23;
+    --warning: #fbbf24;
+    --warning-soft: #342509;
+    --danger: #f87171;
+    --danger-soft: #3b1518;
+    --info: #38bdf8;
+    --info-soft: #0b2a3c;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-subtle: var(--fg-subtle);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-fg: var(--brand-fg);
+  --color-brand-soft: var(--brand-soft);
+
+  --color-live: var(--live);
+  --color-live-soft: var(--live-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 0.875rem;
+
+  --animate-price-flash: price-flash 900ms ease-out;
+  --animate-live-pulse: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes price-flash {
+  from {
+    background-color: var(--brand-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@layer base {
+  body {
+    background-color: var(--canvas);
+    color: var(--fg);
+  }
+
+  /* Tabular numerals keep prices and countdowns from jittering as they tick. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
