@@ -1,8 +1,8 @@
-# Mezat — canlı açık arttırma frontend'i
+# Mezat — canlı açık artırma frontend'i
 
-İki mikroservisin (katalog + açık arttırma) önündeki gateway'e bağlanan Next.js
-uygulaması. Canlı teklif akışı SignalR ile taşınır; sözleşme
-[frontend.md](frontend.md) içinde.
+Üç mikroservisin (Security + Catalog + Auction) önündeki gateway'e bağlanan
+Next.js uygulaması. Kimlik ve yetki Security'den, ürünler Catalog'dan, teklifler
+ve canlı akış Auction'dan gelir. Backend sözleşmesi [frontend.md](frontend.md).
 
 ## Kurulum
 
@@ -12,14 +12,13 @@ cp .env.example .env.local
 npm run dev
 ```
 
-`.env.local`:
-
 | Değişken | Açıklama |
 | --- | --- |
-| `NEXT_PUBLIC_API_URL` | Gateway adresi (varsayılan `http://localhost:5080`). `/api/products`, `/api/auctions` ve `/hubs/auction` yollarını ilgili servise bu dağıtır. Servislerin kendi portlarını (5005 / 5112) kullanmayın. |
-| `NEXT_PUBLIC_SIGNALR_SKIP_NEGOTIATION` | Açık arttırma servisi birden çok replica ile çalışıyorsa `true`. `negotiate` adımını atlar; karşılığında SSE / long polling yedekleri kalkar. |
+| `NEXT_PUBLIC_API_URL` | Gateway adresi (varsayılan `http://localhost:5080`). Tüm yolları ilgili servise bu dağıtır. Servislerin kendi portlarını (5020 / 5005 / 5112) kullanmayın. |
+| `NEXT_PUBLIC_SIGNALR_SKIP_NEGOTIATION` | Auction servisi birden çok replica ile çalışıyorsa `true`. `negotiate` adımını atlar; karşılığında SSE / long polling yedekleri kalkar. |
 
-Gateway CORS'unda `http://localhost:3000` origin'inin ekli olması gerekir.
+Gateway CORS'unda `http://localhost:3000` ekli olmalı. Demo hesabı:
+`admin@auction.local` / `Admin123!` (tüm izinler).
 
 ## Komutlar
 
@@ -34,58 +33,102 @@ npm run lint       # eslint
 ## Dosya yapısı
 
 Feature-first: her alan kendi tiplerini, API'sini, durumunu ve bileşenlerini
-taşır. `app/` yalnızca rota kompozisyonu yapar, iş mantığı içermez.
+taşır. `app/` yalnızca rota kompozisyonu yapar.
 
 ```
 src/
-  app/                     rotalar (ince) + site kabuğu
+  app/
+    (auth)/                giriş, kayıt, parola sıfırlama, e-posta doğrulama
+    (app)/                 site kabuğu: ana sayfa, açık artırmalar, ürünler,
+                           hesap, yönetim
   features/
-    auction/
-      api/                 REST istemcisi
-      model/               alan tipleri, hub sözleşmesi, oda reducer'ı
-      realtime/            AuctionHub arayüzü + SignalR uygulaması
-      hooks/               useAuctionRoom
-      components/          oda, teklif formu, akış, hub günlüğü, kartlar
-      test-support/        fixture'lar ve sahte hub
-    catalog/               ürünler (api / model / components)
-    bidder/                yerel kimlik (JWT gelene kadar)
+    auth/                  token deposu, tek sıralı yenileme, oturum durumu,
+                           giriş/kayıt/MFA formları, RequireAuth
+    account/               profil, parola/e-posta değişimi, MFA, oturumlar
+    access-control/        roller, izinler, kullanıcı-rol atama
+    catalog/               ürün listesi, detay, CRUD formu
+    auction/               liste, oda, SignalR hub, teklif formu, hub günlüğü
   shared/
     api/                   http istemcisi, ApiError, Result
     ui/                    tasarım sistemi
-    lib/                   cn, format, search-params
-    hooks/                 useNow
+    lib/                   cn, format, search-params, browser-storage
+    hooks/                 useNow, useAsyncData, useFormSubmit
 ```
 
 ### Katman kuralı
 
-`shared` hiçbir feature'ı bilmez. Feature'lar `shared`'ı kullanır; aralarında
-yalnızca `auction → bidder` bağımlılığı vardır (hub URL'i kimlik taşır).
+`shared` hiçbir feature'ı bilmez. `auth` yalnızca `shared`'a bağlıdır; diğer
+feature'lar `auth`'a bağlanabilir, çünkü korumalı her çağrı token ister.
 
 ## Tasarım sistemi
 
-Renkler `src/app/globals.css` içinde tek yerde tanımlı: ham CSS değişkenleri,
-karanlık tema için yeniden tanım, sonra `@theme inline` ile Tailwind'e
-`bg-surface` / `text-muted` / `border-line` gibi anlamsal yardımcılar olarak
-açılır. Bileşenler ham renk kullanmaz, bu yüzden palet değişimi hiçbir bileşen
-dosyasına dokunmaz. Primitifler `src/shared/ui`.
+**Token'lar** `src/app/globals.css` içinde: her renk ham CSS değişkeni olarak
+açık ve koyu tema için ayrı tanımlanır, `@theme inline` ile `bg-surface`,
+`text-muted`, `border-line` gibi anlamsal yardımcılara açılır. Bileşenler ham
+renk kullanmaz. Beyaz metin taşıyan dolgular (`bg-gradient-brand`) iki temada
+da koyu tonda sabittir; metin için kullanılan `--brand` ise koyu temada açılır.
+
+**Tema** `<html data-theme>` üzerinde durur. Açık / koyu / sistem tercihi
+`localStorage`'da saklanır ve `<head>`'deki satır içi betik onu **ilk boyamadan
+önce** uygular — bu yüzden yenilemede yanlış tema yanıp sönmez
+(`shared/theme/theme-store.ts`). Sistem modunda işletim sistemi değişince sayfa
+canlı olarak geçiş yapar.
+
+**Hareket** token olarak tanımlı: `animate-fade-up`, `animate-scale-in`,
+`animate-price-pop`, `animate-shimmer` vb. Listeler `stagger(index)` ile sırayla
+girer. `prefers-reduced-motion` açıksa tüm animasyonlar kapanır.
+
+Primitifler `src/shared/ui`: Button, Card, Badge, Alert, Field, Dialog, Toast,
+NavTabs, ChipLink, SearchForm, Table, Skeleton, EmptyState, Thumbnail.
+
+## Kullanıcıya dönük metin
+
+Sunucunun `detail` metni geliştirici için yazılır — çoğu zaman İngilizcedir,
+bazen "access token" ya da "uç" gibi terimler içerir. Bu yüzden **hiçbir zaman
+olduğu gibi gösterilmez.** `shared/api/error-messages.ts` `errorCode`'u (yoksa
+HTTP durumunu) sade Türkçeye çevirir; alan bazlı doğrulama mesajları da
+(`"must contain at least one digit"` → "En az bir rakam içermeli.") çevrilir.
+Yalnızca `UserFacingError` sınıfından gelen mesajlar olduğu gibi gösterilir.
+
+Aynı ilkeyle kullanıcı arayüzünde hata kodu, iz kimliği (traceId), oturum /
+token kimlikleri ve izin kodları gösterilmez; izinler Türkçe adlarıyla görünür
+(`PERMISSION_LABELS`). Odadaki SignalR hub günlüğü yalnızca geliştirme
+derlemesinde (`NODE_ENV=development`) render edilir.
+
+## Kimlik ve yetki
+
+**Token'lar.** Access token 15 dakika, refresh token 30 gün yaşar ve
+`localStorage`'da durur. Bu bir SPA akışıdır: XSS riskini httpOnly çereze göre
+kabul eder, buna karşılık dokümandaki sözleşmeyi birebir uygular.
+
+**Yenileme tek sıradadır** (`features/auth/lib/refresh.ts`). Refresh token tek
+kullanımlıktır ve tüketilmiş bir token'ı tekrar göndermek backend tarafından
+hırsızlık sayılıp **tüm oturumu** iptal ettirir. Aynı anda 401 alan üç istek
+ayrı ayrı yenileme tetiklerse kullanıcı dışarı atılır — bu yüzden hepsi aynı
+promise'i bekler. `use-auction-room` için yazılan testin yanında
+`refresh.test.ts` bu davranışı doğrudan doğrular.
+
+**İki HTTP istemcisi var:**
+
+| İstemci | Kullanım |
+| --- | --- |
+| `authHttp` | `/api/auth/*` ve `/api/mfa/login/complete`. Bearer başlığı yok, 401 tekrarı yok — başarısız giriş 401 olarak görünmeli ve yenileme çağrısı kendini tetiklememeli. |
+| `apiHttp` | Diğer her şey. Token varsa ekler, 401'de bir kez yeniler ve isteği tekrarlar. Token yoksa başlık göndermez, böylece herkese açık okumalar da aynı istemciden geçer. |
+
+**İzinler** `GET /api/users/me`'den gelir ve yalnızca arayüzü biçimlendirmek
+için kullanılır (`RequireAuth`, `PermissionGate`). Asıl kontrol sunucudadır;
+izin olmadan açılan bir ekran yine `403` alır.
+
+## Yetkilendirilmiş sayfalar ve `instant`
+
+Korumalı sayfalar oturum okunana kadar içeriğini render edemez. Next 16'nın
+instant-navigation doğrulaması bunu "düşmüş segment" olarak bildirir, bu yüzden
+o sayfalar `export const instant = false` taşır — doküman bu durumda önerilen
+yol budur. Kabuk (başlık, sekmeler) anında boyanır; yalnızca panel bekler.
 
 ## SignalR mimarisi
 
-Üç karar, [frontend.md](frontend.md)'deki üç kuraldan türüyor:
-
-**Durumun kaynağı sunucudur.** `BidPlaced` olayı `amount`, `minimumNextBid` ve
-`bidCount` değerlerini getirir; reducer bunları olduğu gibi yazar. Hiçbir yerde
-fiyat ya da minimum artış hesaplanmaz.
-
-**İlk durum `JoinAuction`'dan gelir.** Oda sayfası sunucu tarafında veri
-çekmez (`src/app/auctions/[id]/page.tsx`). `JoinAuction` hem gruba katar hem
-anlık durumu döner — "önce REST çek, sonra bağlan" arasındaki boşlukta teklif
-kaçma ihtimali yoktur.
-
-**Teklifin sonucu cevap değil olaydır.** `placeBid` yalnızca çağrının
-gittiğini bildirir; kabul `BidPlaced`, ret `BidRejected` olarak döner.
-
-### Parçalar
+Hub artık `[Authorize]` ile korunuyor ve kimlik token'dan okunuyor.
 
 | Dosya | Sorumluluk |
 | --- | --- |
@@ -96,42 +139,58 @@ gittiğini bildirir; kabul `BidPlaced`, ret `BidRejected` olarak döner.
 | `hooks/use-auction-room.ts` | Bağlantı yaşam döngüsünü reducer'a bağlar |
 
 Durum mantığı reducer'da saf tutulduğu için soket olmadan test edilebilir;
-bağlantı davranışı ise `test-support/fake-auction-hub.ts` ile sürülür.
+bağlantı davranışı `test-support/fake-auction-hub.ts` ile sürülür.
 
 ### Tuzaklar ve nerede ele alındıkları
 
 | Tuzak | Çözüm |
 | --- | --- |
-| Yeniden bağlanınca grup üyeliği sıfırlanır | `onReconnected` içinde `JoinAuction` tekrar çağrılır (`use-auction-room.ts`) |
-| StrictMode effect'i iki kez çalıştırır | `start()` promise'i beklenip sonra `stop()` çağrılır |
-| Kapatılan bağlantı hâlâ olay yayar | `disposed` bayrağı ile `emit` susturulur — eski soketin `onclose`'u yeni odaya düşmez |
+| Hub token'ı başlıkla taşınamaz | `accessTokenFactory` ile verilir; **fonksiyon** olarak, çünkü yeniden bağlanma güncel token'ı okumalı |
+| Yeniden bağlanınca grup üyeliği sıfırlanır | `onReconnected` içinde `JoinAuction` tekrar çağrılır |
+| StrictMode effect'i iki kez çalıştırır | `start()` beklenir, sonra `LeaveAuction` + `stop()` |
+| Kapatılan bağlantı hâlâ olay yayar | `disposed` bayrağı ile `emit` susturulur |
 | Dinleyicide bayat state | Tüm dinleyiciler `dispatch` eder, state okumaz |
-| `bidder` nesnesi bağımlılıkta | Effect `bidder.id` / `bidder.name` alanlarına bağlıdır |
 | Aynı teklif iki kez | Akış `bidId` ile tekilleştirilir |
 | Handler'dan değer dönmesi | `AuctionHub.on` sarmalayıcısı gövdeyi süslü parantezle çağırır |
-| Bağlanmadan `invoke` | `placeBid` önce `isConnected()` kontrol eder, aksi halde `HubNotReadyError` |
-| Kayık istemci saati | `serverOffsetMs` olay zaman damgasından ölçülür, geri sayım buna göre düzeltilir |
+| Bağlanmadan `invoke` | `placeBid` önce `isConnected()` kontrol eder |
+| Kayık istemci saati | `serverOffsetMs` olay zaman damgasından ölçülür |
+| Oturum değişince eski bağlantı | `sessionKey` effect bağımlılığıdır; bağlantı yeniden kurulur |
+
+### Kim olduğunu hub söyler
+
+`WhoAmI` bağlantının token'dan okunan kimliğini döndürür. "En yüksek teklif
+sizde" ve "(siz)" işaretleri buradan gelir; frontend kimliği dışarıdan
+almaz. Teklif gövdesi de yalnızca `{ amount }` taşır.
+
+### Hub mu REST mi
+
+Oda socket açıkken hub'ı kullanır. Bağlantı kopuksa aynı teklif REST ile
+gider: aynı kurallar, aynı olaylar, tek fark sonucu nasıl öğrendiğiniz. Teklif
+formu iki yolun reddini de aynı şekilde gösterir, çünkü REST cevabı da
+`errorCode` ve `minimumRequired` taşır. Form hangi yolun kullanılacağını yazar.
 
 ## Veri çekme
 
-`cacheComponents` açık. Önbelleklenmemiş okumalar `<Suspense>` içinde akar, bu
-yüzden kabuk hemen boyanır ve veri sonradan gelir — derleme çıktısında katalog
-ve liste rotaları Partial Prerender olarak işaretlenir.
+`cacheComponents` açık. Herkese açık listeler (ana sayfa, açık artırmalar,
+ürünler) sunucuda render edilir ve Partial Prerender olarak çıkar: kabuk anında
+boyanır, veri akar. Oturum gerektiren ekranlar istemcide `useAsyncData` ile
+okur.
+
+Açık artırma odası bilinçli olarak sunucuda veri çekmez: `JoinAuction` hem
+gruba katar hem anlık durumu döner, böylece "önce REST çek, sonra bağlan"
+arasındaki boşlukta teklif kaçmaz. Oturumu olmayan ziyaretçi ise odanın REST
+karşılığını görür — açık artırma okumaları herkese açıktır.
 
 Beklenen API hataları `attempt()` ile değere çevrilip `ApiErrorPanel` olarak
-yerinde gösterilir (`errorCode` ve `traceId` görünür kalır); `error.tsx`
-yalnızca beklenmeyen hatalar için.
+yerinde gösterilir (`errorCode` ve `traceId` görünür kalır).
 
-## Kimlik
+## Bilinen boşluk
 
-JWT yok; kimlik `localStorage`'da tutulur ve hub URL'ine query parametresi
-olarak eklenir. Başlıktaki **Yeni kimlik** düğmesi yeni bir `bidderId` üretir:
-ikinci bir sekmede buna basıp teklif verirseniz ilk sekmede `Outbid` uyarısını
-görürsünüz.
-
-JWT eklendiğinde değişecek tek yer `signalr-auction-hub.ts`: query
-parametreleri kalkar, yerine `accessTokenFactory` gelir. Olay sözleşmesi,
-reducer ve bileşenler aynı kalır.
+Backend'de **kullanıcı listeleme ucu yok** (`GET /api/users` → 404). Bu yüzden
+rol atama ekranı kullanıcıyı üye numarasıyla alır; kullanıcı numarasını
+Profilim sayfasındaki "Kopyala" düğmesiyle iletebilir. Benzer şekilde MFA'nın
+açık olup olmadığını söyleyen bir uç yok, bu yüzden güvenlik ekranı durumu
+yansıtmak yerine eylemleri sunar.
 
 ## Testler
 
@@ -139,7 +198,8 @@ reducer ve bileşenler aynı kalır.
 npm run test
 ```
 
-Ağırlık saf birimlerde: oda reducer'ı, HTTP istemcisi, biçimlendirme ve kimlik
-deposu. Bağlantı davranışı (yeniden katılma, kopma, hazır olmayan soket) sahte
-hub ile `use-auction-room.test.tsx` içinde sürülür. Bileşen tarafında teklif
-formu, akış ve geri sayım kapsanır.
+Ağırlık saf birimlerde: oda reducer'ı, HTTP istemcisi (bearer + 401 tekrarı),
+`ProblemDetails` ayrıştırma, yenileme kuyruğu, token deposu, filtre URL'leri ve
+biçimlendirme. Bağlantı davranışı (yeniden katılma, kopma, oturum değişimi,
+hazır olmayan soket) sahte hub ile sürülür; teklif formu, akış ve geri sayım
+bileşen testleriyle kapsanır.
