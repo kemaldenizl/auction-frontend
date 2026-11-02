@@ -1,8 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { Bidder } from "@/features/bidder/model/bidder";
-
 import type { AuctionDetail } from "../model/auction";
 import { HubNotReadyError } from "../realtime/auction-hub";
 import { FakeAuctionHub } from "../test-support/fake-auction-hub";
@@ -15,15 +13,13 @@ import {
 } from "../test-support/fixtures";
 import { useAuctionRoom } from "./use-auction-room";
 
-const BIDDER: Bidder = { id: "u-alice", name: "Alice" };
-
 function setup(snapshot: AuctionDetail = makeAuctionDetail()) {
   const hub = new FakeAuctionHub(snapshot);
   // Stable across renders, as the hook requires of `createHub`.
   const createHub = () => hub;
 
   const view = renderHook(() =>
-    useAuctionRoom(AUCTION_ID, BIDDER, { createHub }),
+    useAuctionRoom(AUCTION_ID, { sessionKey: "session-1", createHub }),
   );
 
   return { hub, ...view };
@@ -45,6 +41,21 @@ describe("useAuctionRoom", () => {
     expect(result.current.bids).toHaveLength(1);
   });
 
+  it("reads its own identity from the hub, not from a prop", async () => {
+    // The bidder comes from the access token now, so the room asks the server
+    // who the connection belongs to rather than being told.
+    const { result } = await setupJoined();
+
+    await waitFor(() => expect(result.current.viewer).not.toBeNull());
+    expect(result.current.viewer).toEqual({
+      id: "u-alice",
+      name: "alice@example.com",
+    });
+    expect(result.current.log.some((entry) => entry.name === "WhoAmI")).toBe(
+      true,
+    );
+  });
+
   it("applies BidPlaced as it arrives", async () => {
     const { hub, result } = await setupJoined();
 
@@ -55,7 +66,6 @@ describe("useAuctionRoom", () => {
     expect(result.current.auction).toMatchObject({
       currentPrice: 1_500,
       bidCount: 4,
-      highestBidderName: "Bob",
     });
     expect(result.current.bids[0].id).toBe("bid-2");
   });
@@ -140,25 +150,26 @@ describe("useAuctionRoom", () => {
 
   it("reports a failed handshake instead of hanging on the loader", async () => {
     const hub = new FakeAuctionHub(makeAuctionDetail());
-    hub.startRejection = new Error("negotiate 404");
+    hub.startRejection = new Error("401 Unauthorized");
     const createHub = () => hub;
 
     const { result } = renderHook(() =>
-      useAuctionRoom(AUCTION_ID, BIDDER, { createHub }),
+      useAuctionRoom(AUCTION_ID, { createHub }),
     );
 
     await waitFor(() => expect(result.current.connection).toBe("error"));
-    expect(result.current.connectionError).toBe("negotiate 404");
+    expect(result.current.connectionError).toBe("401 Unauthorized");
     expect(hub.joinCalls).toHaveLength(0);
   });
 
-  it("stops the connection on unmount", async () => {
+  it("leaves the group and stops the connection on unmount", async () => {
     const { hub, unmount } = await setupJoined();
 
     unmount();
 
-    // Cleanup waits for start() to settle before calling stop().
+    // Cleanup waits for start() to settle before leaving and stopping.
     await waitFor(() => expect(hub.stopCalls).toBe(1));
+    expect(hub.leaveCalls).toEqual([AUCTION_ID]);
   });
 
   it("ignores events from a connection it has torn down", async () => {
@@ -182,7 +193,7 @@ describe("useAuctionRoom", () => {
   it("exposes whether the viewer holds the lead", async () => {
     const { hub, result } = await setupJoined();
 
-    expect(result.current.isLeading).toBe(true);
+    await waitFor(() => expect(result.current.isLeading).toBe(true));
 
     act(() => {
       hub.emit("BidPlaced", makeBidPlaced({ bidderId: "u-bob" }));
@@ -202,5 +213,29 @@ describe("useAuctionRoom", () => {
     });
 
     expect(result.current.viewerCount).toBe(17);
+  });
+
+  it("rebuilds the connection when the signed-in session changes", async () => {
+    // The hub authenticates at connect time, so a different session has to
+    // mean a different connection.
+    const hubs: FakeAuctionHub[] = [];
+    const createHub = () => {
+      const hub = new FakeAuctionHub(makeAuctionDetail());
+      hubs.push(hub);
+      return hub;
+    };
+
+    const { rerender } = renderHook(
+      ({ sessionKey }: { sessionKey: string }) =>
+        useAuctionRoom(AUCTION_ID, { sessionKey, createHub }),
+      { initialProps: { sessionKey: "session-1" } },
+    );
+
+    await waitFor(() => expect(hubs).toHaveLength(1));
+
+    rerender({ sessionKey: "session-2" });
+
+    await waitFor(() => expect(hubs).toHaveLength(2));
+    await waitFor(() => expect(hubs[0].stopCalls).toBe(1));
   });
 });

@@ -67,3 +67,17 @@ export function formatDuration(milliseconds: number): string {
 export function formatCount(value: number, singular: string): string {
   return `${new Intl.NumberFormat(LOCALE).format(value)} ${singular}`;
 }
+
+/**
+ * `ayse@example.com` -> `a***@example.com`.
+ *
+ * The backend sends the bidder's e-mail as their display name, since the token
+ * carries no separate one. Showing other people's addresses in full is a
+ * privacy leak the UI can avoid without losing who is who.
+ */
+export function maskEmail(value: string): string {
+  const at = value.indexOf("@");
+  if (at <= 0) return value;
+
+  return `${value[0]}***${value.slice(at)}`;
+}

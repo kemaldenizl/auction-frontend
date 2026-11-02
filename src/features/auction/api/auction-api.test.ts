@@ -57,21 +57,29 @@ describe("auctionApi", () => {
     );
   });
 
-  it("posts a bid with the bidder identity, the REST fallback path", async () => {
-    await api.placeBid("auction-1", {
-      amount: 1_200,
-      bidderId: "u-kemal",
-      bidderName: "Kemal",
-    });
+  it("posts only the amount — the bidder comes from the token", async () => {
+    await api.placeBid("auction-1", { amount: 1_200 });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toBe(`${BASE_URL}/api/auctions/auction-1/bids`);
     expect(init?.method).toBe("POST");
-    expect(JSON.parse(String(init?.body))).toEqual({
-      amount: 1_200,
-      bidderId: "u-kemal",
-      bidderName: "Kemal",
-    });
+    expect(JSON.parse(String(init?.body))).toEqual({ amount: 1_200 });
+  });
+
+  it("passes the search and product filters through", async () => {
+    await api.listAuctions({ status: "Live", search: "omega", productId: "p-1" });
+
+    expect(requestedUrl()).toBe(
+      `${BASE_URL}/api/auctions?status=Live&search=omega&productId=p-1`,
+    );
+  });
+
+  it("caps the bid history at what the endpoint allows", async () => {
+    await api.listBids("auction-1", 5_000);
+
+    expect(requestedUrl()).toBe(
+      `${BASE_URL}/api/auctions/auction-1/bids?take=200`,
+    );
   });
 
   it("creates an auction for a product", async () => {

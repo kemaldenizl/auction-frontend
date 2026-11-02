@@ -55,13 +55,39 @@ describe("catalogApi", () => {
     expect(requestedUrl()).toBe(`${BASE_URL}/api/products/categories`);
   });
 
-  it("uses the right verb for each mutation", async () => {
-    await api.createProduct({
-      name: "Daktilo",
-      category: "koleksiyon",
-      startingPrice: 500,
+  it("passes search, sort and active filters through", async () => {
+    await api.listProducts({
+      search: "omega",
+      category: "Saat",
+      sortBy: "price",
+      descending: false,
+      isActive: true,
     });
-    await api.updateProduct("product-1", { startingPrice: 600 });
+
+    expect(requestedUrl()).toBe(
+      `${BASE_URL}/api/products?search=omega&category=Saat&sortBy=price&descending=false&isActive=true`,
+    );
+  });
+
+  it("encodes a Turkish search term, which the server rejects unencoded", async () => {
+    await api.listProducts({ search: "müzik enstrümanı" });
+
+    expect(requestedUrl()).toBe(
+      `${BASE_URL}/api/products?search=m%C3%BCzik+enstr%C3%BCman%C4%B1`,
+    );
+  });
+
+  it("uses the right verb for each mutation", async () => {
+    const draft = {
+      name: "Daktilo",
+      description: null,
+      category: "Koleksiyon",
+      startingPrice: 500,
+      imageUrl: null,
+    };
+
+    await api.createProduct(draft);
+    await api.updateProduct("product-1", { ...draft, isActive: false });
     await api.deleteProduct("product-1");
 
     expect(fetchMock.mock.calls.map(([, init]) => init?.method)).toEqual([
@@ -69,5 +95,25 @@ describe("catalogApi", () => {
       "PUT",
       "DELETE",
     ]);
+  });
+
+  it("sends every field on update, because PUT replaces the record", async () => {
+    await api.updateProduct("product-1", {
+      name: "Daktilo",
+      description: "açıklama",
+      category: "Koleksiyon",
+      startingPrice: 600,
+      imageUrl: null,
+      isActive: true,
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      name: "Daktilo",
+      description: "açıklama",
+      category: "Koleksiyon",
+      startingPrice: 600,
+      imageUrl: null,
+      isActive: true,
+    });
   });
 });

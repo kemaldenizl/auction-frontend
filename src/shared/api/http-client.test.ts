@@ -167,3 +167,124 @@ describe("createHttpClient", () => {
     expect(error.message).toBe("fetch failed");
   });
 });
+
+describe("createHttpClient with a session", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  function unauthorizedResponse(): Response {
+    return jsonResponse(
+      {
+        title: "Yetkisiz",
+        status: 401,
+        detail: "Token süresi doldu",
+        errorCode: "unauthorized",
+        traceId: "",
+      },
+      401,
+    );
+  }
+
+  function authHeader(call: number): string | undefined {
+    const headers = fetchMock.mock.calls[call][1]?.headers as
+      | Record<string, string>
+      | undefined;
+    return headers?.Authorization;
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    fetchMock.mockReset();
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the bearer token when there is one", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({})));
+    const http = createHttpClient(BASE_URL, {
+      getAccessToken: () => "token-1",
+    });
+
+    await http.get("/api/users/me");
+
+    expect(authHeader(0)).toBe("Bearer token-1");
+  });
+
+  it("sends no header when signed out, so public reads still work", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({})));
+    const http = createHttpClient(BASE_URL, { getAccessToken: () => null });
+
+    await http.get("/api/products");
+
+    expect(authHeader(0)).toBeUndefined();
+  });
+
+  it("refreshes once on 401 and replays the request with the new token", async () => {
+    let token = "stale";
+    fetchMock
+      .mockImplementationOnce(() => Promise.resolve(unauthorizedResponse()))
+      .mockImplementationOnce(() => Promise.resolve(jsonResponse({ ok: true })));
+
+    const onUnauthorized = vi.fn(async () => {
+      token = "fresh";
+      return true;
+    });
+
+    const http = createHttpClient(BASE_URL, {
+      getAccessToken: () => token,
+      onUnauthorized,
+    });
+
+    await expect(http.get("/api/users/me")).resolves.toEqual({ ok: true });
+
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(authHeader(0)).toBe("Bearer stale");
+    // The retry re-reads the token rather than reusing the captured one.
+    expect(authHeader(1)).toBe("Bearer fresh");
+  });
+
+  it("gives up after a second 401 instead of looping", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(unauthorizedResponse()));
+    const onUnauthorized = vi.fn(async () => true);
+
+    const http = createHttpClient(BASE_URL, {
+      getAccessToken: () => "token-1",
+      onUnauthorized,
+    });
+
+    const error = (await http
+      .get("/api/users/me")
+      .catch((cause: unknown) => cause)) as ApiError;
+
+    expect(error.isUnauthorized).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry when the refresh failed", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(unauthorizedResponse()));
+
+    const http = createHttpClient(BASE_URL, {
+      getAccessToken: () => "token-1",
+      onUnauthorized: async () => false,
+    });
+
+    await expect(http.get("/api/users/me")).rejects.toBeInstanceOf(ApiError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces a 429 with a code the UI can branch on", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(null, { status: 429 })),
+    );
+    const http = createHttpClient(BASE_URL);
+
+    const error = (await http
+      .post("/api/auth/login", {})
+      .catch((cause: unknown) => cause)) as ApiError;
+
+    expect(error.isRateLimited).toBe(true);
+    expect(error.errorCode).toBe("rate_limited");
+  });
+});

@@ -1,13 +1,44 @@
 "use client";
 
+import { Gavel } from "lucide-react";
 import { useState } from "react";
 
+import { errorMessage, isApiError, messageForProblem } from "@/shared/api";
 import { formatMoney } from "@/shared/lib/format";
 import { Alert, Button, Field, Input, fieldDescriptionId } from "@/shared/ui";
 
 import type { BidRejectedEvent } from "../model/hub-events";
 
 const FIELD_ID = "bid-amount";
+
+/** A refusal, whichever path reported it. */
+interface BidProblem {
+  message: string;
+  minimumRequired: number | null;
+}
+
+/**
+ * The live connection and the fallback request report a refusal with the same
+ * `errorCode` and `minimumRequired`, so both render the same plain message.
+ * The server's own wording is written for developers and never shown.
+ */
+function fromHubEvent(event: BidRejectedEvent): BidProblem {
+  return {
+    message: messageForProblem({
+      status: 409,
+      errorCode: event.errorCode,
+      minimumRequired: event.minimumRequired,
+    }),
+    minimumRequired: event.minimumRequired,
+  };
+}
+
+function fromThrown(error: unknown): BidProblem {
+  return {
+    message: errorMessage(error, "Teklifiniz gönderilemedi. Lütfen tekrar deneyin."),
+    minimumRequired: isApiError(error) ? (error.minimumRequired ?? null) : null,
+  };
+}
 
 export interface BidFormProps {
   /** The server's floor for the next bid. Shown as-is, never recomputed. */
@@ -31,37 +62,42 @@ export function BidForm({
 }: BidFormProps) {
   const [amount, setAmount] = useState("");
   const [sending, setSending] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [invalid, setInvalid] = useState<string | null>(null);
+  const [thrown, setThrown] = useState<BidProblem | null>(null);
 
   // Convenience shortcuts, not a reimplementation of the bidding rule: each
   // one starts from the server's `minimumNextBid` and the server still has
   // the final say on whether the amount is accepted.
   const shortcuts = [
     { label: "En az", value: minimumNextBid },
-    { label: "+1 artış", value: minimumNextBid + minimumIncrement },
-    { label: "+5 artış", value: minimumNextBid + minimumIncrement * 5 },
+    { label: "+1 adım", value: minimumNextBid + minimumIncrement },
+    { label: "+5 adım", value: minimumNextBid + minimumIncrement * 5 },
   ];
+
+  const problem = thrown ?? (rejection ? fromHubEvent(rejection) : null);
+
+  function dismiss() {
+    setThrown(null);
+    onDismissRejection();
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
 
     const parsed = Number(amount);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      setLocalError("Geçerli bir tutar girin.");
+      setInvalid("Lütfen geçerli bir tutar girin.");
       return;
     }
 
-    setLocalError(null);
+    setInvalid(null);
+    setThrown(null);
     setSending(true);
     try {
       await onSubmit(parsed);
-      // Resolving only means the invocation left the client. Acceptance or
-      // refusal arrives separately as BidPlaced / BidRejected.
       setAmount("");
     } catch (error) {
-      setLocalError(
-        error instanceof Error ? error.message : "Teklif gönderilemedi.",
-      );
+      setThrown(fromThrown(error));
     } finally {
       setSending(false);
     }
@@ -72,10 +108,20 @@ export function BidForm({
       <Field
         id={FIELD_ID}
         label="Teklifiniz"
-        hint={`En az ${formatMoney(minimumNextBid)} verebilirsiniz.`}
-        error={localError}
+        hint={
+          disabled && disabledReason
+            ? disabledReason
+            : `En az ${formatMoney(minimumNextBid)} teklif verebilirsiniz.`
+        }
+        error={invalid}
       >
-        <div className="flex gap-2">
+        <div className="relative">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-lg font-semibold text-subtle"
+          >
+            ₺
+          </span>
           <Input
             id={FIELD_ID}
             type="number"
@@ -86,64 +132,66 @@ export function BidForm({
             placeholder={String(minimumNextBid)}
             onChange={(event) => setAmount(event.target.value)}
             disabled={disabled || sending}
-            aria-describedby={fieldDescriptionId(FIELD_ID, localError !== null)}
-            className="tabular"
+            aria-invalid={invalid !== null}
+            aria-describedby={fieldDescriptionId(FIELD_ID, invalid !== null)}
+            className="h-14 pl-9 text-lg font-semibold tabular"
           />
-          <Button type="submit" loading={sending} disabled={disabled}>
-            Teklif ver
-          </Button>
         </div>
       </Field>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {shortcuts.map((shortcut) => (
-          <Button
+          <button
             key={shortcut.label}
             type="button"
-            variant="secondary"
-            size="sm"
             disabled={disabled || sending}
             onClick={() => setAmount(String(shortcut.value))}
+            aria-label={`${shortcut.label}: ${formatMoney(shortcut.value)}`}
+            className="rounded-xl border border-line bg-surface px-2 py-2 text-center transition-[transform,border-color,background-color] duration-200 hover:-translate-y-0.5 hover:border-brand/40 hover:bg-brand-soft/50 active:scale-95 disabled:pointer-events-none disabled:opacity-45 cursor-pointer"
           >
-            {shortcut.label} · {formatMoney(shortcut.value)}
-          </Button>
+            <span className="block text-[11px] text-subtle">{shortcut.label}</span>
+            <span className="block text-xs font-semibold tabular text-fg">
+              {formatMoney(shortcut.value)}
+            </span>
+          </button>
         ))}
       </div>
 
-      {disabled && disabledReason && (
-        <p className="text-xs text-subtle">{disabledReason}</p>
-      )}
+      <Button
+        type="submit"
+        size="lg"
+        loading={sending}
+        disabled={disabled}
+        className="w-full"
+      >
+        {!sending && <Gavel />}
+        Teklif ver
+      </Button>
 
-      {rejection && (
+      {problem && (
         <Alert
           role="alert"
-          tone="danger"
-          title="Teklif reddedildi"
+          tone="warning"
+          title="Teklifiniz kabul edilmedi"
           action={
             <div className="flex gap-2">
-              {rejection.minimumRequired !== null && (
+              {problem.minimumRequired !== null && (
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
-                  onClick={() => setAmount(String(rejection.minimumRequired))}
+                  onClick={() => setAmount(String(problem.minimumRequired))}
                 >
-                  {formatMoney(rejection.minimumRequired)} yap
+                  {formatMoney(problem.minimumRequired)} yap
                 </Button>
               )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onDismissRejection}
-              >
+              <Button type="button" variant="ghost" size="sm" onClick={dismiss}>
                 Kapat
               </Button>
             </div>
           }
         >
-          <p>{rejection.reason}</p>
-          <p className="mt-0.5 font-mono text-xs">{rejection.errorCode}</p>
+          {problem.message}
         </Alert>
       )}
     </form>

@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
-import type { Bidder } from "@/features/bidder/model/bidder";
-
 import {
   auctionRoomReducer,
   canPlaceBid,
@@ -21,6 +19,12 @@ import {
 import { createSignalRAuctionHub } from "../realtime/signalr-auction-hub";
 
 export interface UseAuctionRoomOptions {
+  /**
+   * Rebuilds the connection when it changes. Pass the session id: signing in
+   * or out changes the token the hub authenticates with, and the hub is
+   * `[Authorize]`d, so the old connection is no longer the right one.
+   */
+  sessionKey?: string;
   /**
    * Transport factory. Must be referentially stable — it is an effect
    * dependency, so a new function on every render would tear the socket down
@@ -40,8 +44,10 @@ export interface AuctionRoom extends AuctionRoomState {
 
 export function useAuctionRoom(
   auctionId: string,
-  bidder: Bidder,
-  { createHub = createSignalRAuctionHub }: UseAuctionRoomOptions = {},
+  {
+    sessionKey = "",
+    createHub = createSignalRAuctionHub,
+  }: UseAuctionRoomOptions = {},
 ): AuctionRoom {
   const [state, dispatch] = useReducer(
     auctionRoomReducer,
@@ -51,18 +57,13 @@ export function useAuctionRoom(
 
   const hubRef = useRef<AuctionHub | null>(null);
 
-  // `bidder` is an object: callers routinely pass a fresh `{ id, name }`
-  // literal on every render. Depending on the fields instead of the object
-  // keeps the effect from reconnecting on each render.
-  const { id: bidderId, name: bidderName } = bidder;
-
   useEffect(() => {
     let disposed = false;
     const now = () => Date.now();
 
     dispatch({ type: "room/reset", auctionId, at: now() });
 
-    const hub = createHub({ id: bidderId, name: bidderName });
+    const hub = createHub();
     hubRef.current = hub;
 
     // A hub that has been torn down still fires until `stop()` settles. Its
@@ -86,6 +87,11 @@ export function useAuctionRoom(
     const join = async () => {
       const auction = await hub.join(auctionId);
       emit({ type: "room/joined", auction, at: now() });
+    };
+
+    const identify = async () => {
+      const viewer = await hub.whoAmI();
+      emit({ type: "room/identified", viewer, at: now() });
     };
 
     // Every listener dispatches, so the reducer — not a stale closure — owns
@@ -118,11 +124,7 @@ export function useAuctionRoom(
     });
 
     hub.onClose(() => {
-      emit({
-        type: "connection/changed",
-        status: "disconnected",
-        at: now(),
-      });
+      emit({ type: "connection/changed", status: "disconnected", at: now() });
     });
 
     hub.onReconnected(() => {
@@ -139,7 +141,7 @@ export function useAuctionRoom(
       .then(() => {
         if (disposed) return;
         emit({ type: "connection/changed", status: "connected", at: now() });
-        return join();
+        return Promise.all([join(), identify()]);
       })
       .catch(reportFailure);
 
@@ -148,10 +150,15 @@ export function useAuctionRoom(
       hubRef.current = null;
       // StrictMode runs effects twice in development (mount -> cleanup ->
       // mount). Calling stop() while start() is still in flight throws, so
-      // wait for start to settle first.
-      void started.catch(() => {}).then(() => hub.stop());
+      // wait for start to settle first. Leaving the group before stopping is
+      // tidy rather than required — the server drops the connection anyway.
+      void started
+        .catch(() => {})
+        .then(() => (hub.isConnected() ? hub.leave(auctionId) : undefined))
+        .catch(() => {})
+        .then(() => hub.stop());
     };
-  }, [auctionId, bidderId, bidderName, createHub]);
+  }, [auctionId, sessionKey, createHub]);
 
   const placeBid = useCallback(
     async (amount: number) => {
@@ -179,9 +186,9 @@ export function useAuctionRoom(
       dismissOutbid,
       dismissRejection,
       isLive: isLive(state),
-      isLeading: isLeading(state, bidderId),
+      isLeading: isLeading(state),
       canBid: canPlaceBid(state),
     }),
-    [state, placeBid, dismissOutbid, dismissRejection, bidderId],
+    [state, placeBid, dismissOutbid, dismissRejection],
   );
 }
