@@ -1,35 +1,40 @@
+import { PackageOpen } from "lucide-react";
+
 import { attempt } from "@/shared/api";
-import { ApiErrorPanel, EmptyState, Pagination, Skeleton } from "@/shared/ui";
+import {
+  ApiErrorPanel,
+  EmptyState,
+  Pagination,
+  Skeleton,
+  stagger,
+} from "@/shared/ui";
 
 import { catalogApi } from "../api/catalog-api";
-import { CategoryFilter } from "./category-filter";
+import type { ProductListQuery } from "../model/product";
+import {
+  ProductFilters,
+  productsHref,
+  type ProductFilterState,
+} from "./product-filters";
 import { ProductCard } from "./product-card";
 
 const PAGE_SIZE = 12;
 
-function catalogHref(page: number, category?: string): string {
-  const params = new URLSearchParams();
-  if (category) params.set("category", category);
-  if (page > 1) params.set("page", String(page));
-  const query = params.toString();
-  return query ? `/products?${query}` : "/products";
-}
-
 /**
- * Async Server Component: the catalog is read on the server, so no API key or
- * CORS hop is involved and the markup streams into the page shell.
+ * Async Server Component: the catalogue is read on the server, so the markup
+ * streams into the page shell and no CORS hop is involved.
  */
 export async function ProductCatalog({
-  category,
+  filters,
   page,
 }: {
-  category?: string;
+  filters: ProductFilterState;
   page: number;
 }) {
+  const query: ProductListQuery = { ...filters, page, pageSize: PAGE_SIZE };
+
   const [products, categories] = await Promise.all([
-    attempt(
-      catalogApi.listProducts({ category, page, pageSize: PAGE_SIZE }),
-    ),
+    attempt(catalogApi.listProducts(query)),
     attempt(catalogApi.listCategories()),
   ]);
 
@@ -38,22 +43,24 @@ export async function ProductCatalog({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* A failed category read must not hide the products themselves. */}
-      {categories.ok && (
-        <CategoryFilter categories={categories.data} selected={category} />
-      )}
+      <ProductFilters
+        categories={categories.ok ? categories.data : []}
+        filters={filters}
+      />
 
       {products.data.items.length === 0 ? (
         <EmptyState
+          icon={<PackageOpen />}
           title="Ürün bulunamadı"
-          description="Bu filtreyle eşleşen ürün yok. Katalog servisinde veri var mı?"
+          description="Aramanızı ya da filtreleri değiştirmeyi deneyin."
         />
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {products.data.items.map((product) => (
+        <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {products.data.items.map((product, index) => (
             <li key={product.id}>
-              <ProductCard product={product} />
+              <ProductCard product={product} style={stagger(index)} />
             </li>
           ))}
         </ul>
@@ -61,7 +68,7 @@ export async function ProductCatalog({
 
       <Pagination
         result={products.data}
-        hrefForPage={(target) => catalogHref(target, category)}
+        hrefForPage={(target) => productsHref({ ...filters, page: target })}
       />
     </div>
   );
@@ -69,11 +76,11 @@ export async function ProductCatalog({
 
 export function ProductCatalogSkeleton() {
   return (
-    <div className="space-y-6">
-      <Skeleton className="h-8 w-64" />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="space-y-8">
+      <Skeleton className="h-28 rounded-card" />
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }, (_, index) => (
-          <Skeleton key={index} className="h-72" />
+          <Skeleton key={index} className="h-80 rounded-card" />
         ))}
       </div>
     </div>

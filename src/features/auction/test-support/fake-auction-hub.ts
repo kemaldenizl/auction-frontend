@@ -3,6 +3,7 @@ import type {
   AuctionHub,
   HubEventMap,
   HubEventName,
+  HubIdentity,
 } from "../realtime/auction-hub";
 
 /**
@@ -21,10 +22,12 @@ type OpaqueHandler = (payload: unknown) => void;
  */
 export class FakeAuctionHub implements AuctionHub {
   snapshot: AuctionDetail;
+  identity: HubIdentity = { id: "u-alice", name: "alice@example.com" };
   connected = false;
   startRejection: Error | null = null;
 
   readonly joinCalls: string[] = [];
+  readonly leaveCalls: string[] = [];
   readonly placeBidCalls: { auctionId: string; amount: number }[] = [];
   stopCalls = 0;
 
@@ -52,8 +55,16 @@ export class FakeAuctionHub implements AuctionHub {
     return this.snapshot;
   }
 
+  async leave(auctionId: string): Promise<void> {
+    this.leaveCalls.push(auctionId);
+  }
+
   async placeBid(auctionId: string, amount: number): Promise<void> {
     this.placeBidCalls.push({ auctionId, amount });
+  }
+
+  async whoAmI(): Promise<HubIdentity> {
+    return this.identity;
   }
 
   isConnected(): boolean {

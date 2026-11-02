@@ -1,3 +1,4 @@
+import { ImageOff } from "lucide-react";
 import Image from "next/image";
 
 import { cn } from "@/shared/lib/cn";
@@ -24,10 +25,17 @@ export function Thumbnail({
       )}
     >
       {src ? (
-        <Image src={src} alt={alt} fill sizes={sizes} className="object-cover" />
+        // `group-hover` lets a parent card zoom the image on hover.
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          sizes={sizes}
+          className="object-cover transition-transform duration-700 ease-out-expo group-hover:scale-105"
+        />
       ) : (
-        <span className="absolute inset-0 grid place-items-center text-xs text-subtle">
-          Görsel yok
+        <span className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_30%_20%,var(--brand-soft),transparent_70%)] text-subtle">
+          <ImageOff aria-label="Görsel yok" className="size-7" />
         </span>
       )}
     </div>

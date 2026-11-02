@@ -23,15 +23,17 @@ const time = new Intl.DateTimeFormat("tr-TR", {
 });
 
 /**
- * Raw hub traffic, newest first. This panel exists to make SignalR visible:
- * which events arrive, in what order, and what a reconnect actually does.
+ * Raw hub traffic, newest first. This panel exists to make SignalR visible
+ * while developing — which events arrive, in what order, and what a reconnect
+ * actually does. It is rendered in development builds only; end users never
+ * see it.
  */
 export function HubEventLog({ entries }: { entries: HubLogEntry[] }) {
   return (
-    <Card>
+    <Card className="border-dashed">
       <CardHeader
-        title="Hub günlüğü"
-        description="Gelen olaylar ve giden çağrılar"
+        title="Geliştirici · SignalR hub günlüğü"
+        description="Yalnızca geliştirme ortamında görünür."
       />
       <CardBody className="p-0">
         {entries.length === 0 ? (

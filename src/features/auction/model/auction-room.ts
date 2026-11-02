@@ -1,6 +1,7 @@
 import { formatMoney } from "@/shared/lib/format";
 
 import type { AuctionDetail, Bid } from "./auction";
+import type { HubIdentity } from "../realtime/auction-hub";
 import type {
   AuctionCancelledEvent,
   AuctionEndedEvent,
@@ -37,6 +38,11 @@ export interface HubLogEntry {
 export interface AuctionRoomState {
   readonly auctionId: string;
   auction: AuctionDetail | null;
+  /**
+   * Who the hub says this connection is, read from the access token by
+   * `WhoAmI`. Used to mark your own bids and whether you hold the lead.
+   */
+  viewer: HubIdentity | null;
   bids: Bid[];
   viewerCount: number;
   connection: ConnectionStatus;
@@ -61,6 +67,7 @@ interface ActionAt {
 
 export type AuctionRoomAction =
   | ({ type: "room/reset"; auctionId: string } & ActionAt)
+  | ({ type: "room/identified"; viewer: HubIdentity } & ActionAt)
   | ({ type: "room/joined"; auction: AuctionDetail } & ActionAt)
   | ({ type: "connection/changed"; status: ConnectionStatus } & ActionAt)
   | ({ type: "connection/failed"; message: string } & ActionAt)
@@ -79,6 +86,7 @@ export function createInitialState(auctionId: string): AuctionRoomState {
   return {
     auctionId,
     auction: null,
+    viewer: null,
     bids: [],
     viewerCount: 0,
     connection: "connecting",
@@ -146,6 +154,17 @@ export function auctionRoomReducer(
   switch (action.type) {
     case "room/reset":
       return createInitialState(action.auctionId);
+
+    case "room/identified":
+      return appendLog(
+        { ...state, viewer: action.viewer },
+        {
+          at: action.at,
+          channel: "invocation",
+          name: "WhoAmI",
+          summary: action.viewer.name,
+        },
+      );
 
     case "connection/changed":
       return appendLog(
@@ -349,13 +368,9 @@ export function isLive(state: AuctionRoomState): boolean {
   return state.auction?.status === "Live";
 }
 
-export function isLeading(
-  state: AuctionRoomState,
-  bidderId: string,
-): boolean {
-  return (
-    state.auction !== null && state.auction.highestBidderId === bidderId
-  );
+export function isLeading(state: AuctionRoomState): boolean {
+  if (!state.auction || !state.viewer) return false;
+  return state.auction.highestBidderId === state.viewer.id;
 }
 
 export function canPlaceBid(state: AuctionRoomState): boolean {

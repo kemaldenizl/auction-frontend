@@ -1,4 +1,4 @@
-import { formatMoney } from "@/shared/lib/format";
+import { formatMoney, maskEmail } from "@/shared/lib/format";
 import { Alert, Button } from "@/shared/ui";
 
 import type { OutbidEvent } from "../model/hub-events";
@@ -15,20 +15,16 @@ export function OutbidAlert({
     <Alert
       role="alert"
       tone="warning"
-      title="Teklifiniz geçildi"
+      title="Teklifiniz geçildi!"
       action={
         <Button variant="ghost" size="sm" onClick={onDismiss}>
           Kapat
         </Button>
       }
     >
-      <p>
-        {formatMoney(outbid.yourBid)} → {formatMoney(outbid.newPrice)} ·{" "}
-        {outbid.newLeaderName}
-      </p>
-      <p className="mt-0.5">
-        Yeniden öne geçmek için en az {formatMoney(outbid.minimumNextBid)}.
-      </p>
+      {maskEmail(outbid.newLeaderName)} {formatMoney(outbid.newPrice)} teklif
+      verdi. Yeniden öne geçmek için en az{" "}
+      <strong>{formatMoney(outbid.minimumNextBid)}</strong> teklif edin.
     </Alert>
   );
 }

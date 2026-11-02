@@ -1,17 +1,17 @@
-import Link from "next/link";
-
-import { cn } from "@/shared/lib/cn";
+import { ChipLink } from "@/shared/ui";
 
 import { AUCTION_STATUSES, type AuctionStatus } from "../model/auction";
+import { auctionsHref } from "./auction-board";
 import { auctionStatusLabel } from "./auction-status-badge";
-
-const CHIP =
-  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors";
 
 export function AuctionStatusFilter({
   selected,
+  search,
+  productId,
 }: {
   selected?: AuctionStatus;
+  search?: string;
+  productId?: string;
 }) {
   const options: { label: string; status?: AuctionStatus }[] = [
     { label: "Tümü" },
@@ -22,26 +22,17 @@ export function AuctionStatusFilter({
   ];
 
   return (
-    <nav aria-label="Durum filtresi" className="flex flex-wrap gap-2">
-      {options.map((option) => {
-        const active = option.status === selected;
-
-        return (
-          <Link
-            key={option.label}
-            href={option.status ? `/auctions?status=${option.status}` : "/auctions"}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              CHIP,
-              active
-                ? "border-brand bg-brand-soft text-brand"
-                : "border-line text-muted hover:bg-surface-muted",
-            )}
-          >
-            {option.label}
-          </Link>
-        );
-      })}
+    <nav aria-label="Duruma göre filtrele" className="flex flex-wrap gap-2">
+      {options.map((option) => (
+        <ChipLink
+          key={option.label}
+          // Keeps the active search when switching status.
+          href={auctionsHref({ status: option.status, search, productId })}
+          active={option.status === selected}
+        >
+          {option.label}
+        </ChipLink>
+      ))}
     </nav>
   );
 }

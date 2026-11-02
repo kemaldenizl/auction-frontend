@@ -12,13 +12,13 @@ export type BadgeTone =
   | "info";
 
 const TONES: Record<BadgeTone, string> = {
-  neutral: "bg-surface-muted text-muted",
-  brand: "bg-brand-soft text-brand",
-  live: "bg-live-soft text-live",
-  success: "bg-success-soft text-success",
-  warning: "bg-warning-soft text-warning",
-  danger: "bg-danger-soft text-danger",
-  info: "bg-info-soft text-info",
+  neutral: "bg-surface-muted text-muted ring-line",
+  brand: "bg-brand-soft text-brand ring-brand/20",
+  live: "bg-live-soft text-live ring-live/25",
+  success: "bg-success-soft text-success ring-success/20",
+  warning: "bg-warning-soft text-warning ring-warning/20",
+  danger: "bg-danger-soft text-danger ring-danger/20",
+  info: "bg-info-soft text-info ring-info/20",
 };
 
 export function Badge({
@@ -28,7 +28,7 @@ export function Badge({
   children,
 }: {
   tone?: BadgeTone;
-  /** Adds a breathing dot — used for the "Canlı" state. */
+  /** Adds a breathing dot with an expanding ring — used for "Canlı". */
   pulse?: boolean;
   className?: string;
   children: ReactNode;
@@ -36,7 +36,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset [&_svg]:size-3",
         TONES[tone],
         className,
       )}

@@ -8,9 +8,11 @@ import type {
 import { cn } from "@/shared/lib/cn";
 
 const CONTROL = cn(
-  "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg",
-  "placeholder:text-subtle transition-colors",
-  "hover:border-line-strong disabled:cursor-not-allowed disabled:opacity-50",
+  "w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-fg shadow-[inset_0_1px_2px] shadow-black/[0.03]",
+  "placeholder:text-subtle transition-[border-color,box-shadow] duration-200",
+  "hover:border-line-strong focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/15",
+  "disabled:cursor-not-allowed disabled:opacity-50",
+  "aria-[invalid=true]:border-danger aria-[invalid=true]:focus:ring-danger/15",
 );
 
 export function Input({
@@ -24,7 +26,7 @@ export function Textarea({
   className,
   ...props
 }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={cn(CONTROL, "min-h-20", className)} />;
+  return <textarea {...props} className={cn(CONTROL, "min-h-24", className)} />;
 }
 
 export function Select({
@@ -70,7 +72,10 @@ export function Field({
       </label>
       {children}
       {error ? (
-        <p id={`${id}-error`} className="text-xs text-danger">
+        <p
+          id={`${id}-error`}
+          className="animate-fade-in text-xs font-medium text-danger"
+        >
           {error}
         </p>
       ) : (

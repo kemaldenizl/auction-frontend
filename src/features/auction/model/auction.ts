@@ -44,22 +44,31 @@ export interface AuctionDetail extends AuctionSummary {
 
 export interface AuctionListQuery {
   status?: AuctionStatus;
+  /** Matches the auction title. */
+  search?: string;
+  productId?: string;
   page?: number;
   pageSize?: number;
 }
 
 export interface CreateAuctionDraft {
   productId: string;
-  minimumIncrement: number;
-  durationMinutes: number;
+  /** Falls back to the product's catalogue price. */
   startingPrice?: number;
+  /** Defaults to 100. */
+  minimumIncrement?: number;
+  /** Omit to start immediately; a past timestamp is rejected. */
   startsAt?: string;
+  /** Defaults to 60, at most 10080 (7 days). */
+  durationMinutes?: number;
 }
 
+/**
+ * Only the amount travels. The bidder is read from the access token, so a
+ * `bidderId` in the body would be ignored — nobody can bid as someone else.
+ */
 export interface PlaceBidDraft {
   amount: number;
-  bidderId: string;
-  bidderName: string;
 }
 
 export function isAuctionStatus(value: string): value is AuctionStatus {

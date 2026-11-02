@@ -14,6 +14,23 @@ export interface HttpClient {
   delete<T>(path: string, options?: RequestOptions): Promise<T>;
 }
 
+export interface HttpClientOptions {
+  defaults?: RequestInit;
+  /**
+   * Read fresh on every request rather than captured once, so a token that
+   * was just refreshed is used immediately.
+   */
+  getAccessToken?: () => string | null;
+  /**
+   * Called when a request comes back 401. Resolving `true` means a usable
+   * token is now available and the request is retried exactly once; `false`
+   * lets the 401 surface. Implementations must serialise themselves — the
+   * refresh token is single-use and replaying a consumed one kills the
+   * whole session.
+   */
+  onUnauthorized?: () => Promise<boolean>;
+}
+
 /** Builds `?a=1&b=2`, skipping empty values so optional filters can be spread in. */
 export function toQueryString(params: QueryParams = {}): string {
   const search = new URLSearchParams();
@@ -30,7 +47,7 @@ export function toQueryString(params: QueryParams = {}): string {
 const NETWORK_ERROR: ApiProblem = {
   title: "Sunucuya ulaşılamadı",
   status: 0,
-  detail: "API adresine bağlanılamadı. Gateway çalışıyor mu?",
+  detail: "Sunucuya ulaşılamadı.",
   errorCode: "network_error",
   traceId: "",
 };
@@ -44,7 +61,7 @@ async function readProblem(response: Response): Promise<ApiProblem> {
     title: "İstek başarısız",
     status: response.status,
     detail: `HTTP ${response.status} ${response.statusText}`.trim(),
-    errorCode: "unknown",
+    errorCode: response.status === 429 ? "rate_limited" : "unknown",
     traceId: "",
   };
 
@@ -64,24 +81,25 @@ function isEmptyResponse(response: Response): boolean {
 
 export function createHttpClient(
   baseUrl: string,
-  defaults: RequestInit = {},
+  { defaults = {}, getAccessToken, onUnauthorized }: HttpClientOptions = {},
 ): HttpClient {
-  async function send<T>(
+  async function fetchOnce(
     method: string,
-    path: string,
+    url: string,
     body: unknown,
-    { query, ...init }: RequestOptions = {},
-  ): Promise<T> {
+    init: Omit<RequestOptions, "query">,
+  ): Promise<Response> {
     const hasBody = body !== undefined;
+    const token = getAccessToken?.();
 
-    let response: Response;
     try {
-      response = await fetch(`${baseUrl}${path}${toQueryString(query)}`, {
+      return await fetch(url, {
         ...defaults,
         ...init,
         method,
         headers: {
           ...(hasBody ? { "Content-Type": "application/json" } : null),
+          ...(token ? { Authorization: `Bearer ${token}` } : null),
           ...defaults.headers,
           ...init.headers,
         },
@@ -92,6 +110,23 @@ export function createHttpClient(
         ...NETWORK_ERROR,
         detail: cause instanceof Error ? cause.message : NETWORK_ERROR.detail,
       });
+    }
+  }
+
+  async function send<T>(
+    method: string,
+    path: string,
+    body: unknown,
+    { query, ...init }: RequestOptions = {},
+  ): Promise<T> {
+    const url = `${baseUrl}${path}${toQueryString(query)}`;
+
+    let response = await fetchOnce(method, url, body, init);
+
+    // One retry, and only after the refresh succeeded. A second 401 means the
+    // session is genuinely over.
+    if (response.status === 401 && onUnauthorized && (await onUnauthorized())) {
+      response = await fetchOnce(method, url, body, init);
     }
 
     if (!response.ok) {

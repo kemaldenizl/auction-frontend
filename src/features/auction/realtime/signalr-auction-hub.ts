@@ -5,8 +5,7 @@ import {
   LogLevel,
 } from "@microsoft/signalr";
 
-import type { Bidder } from "@/features/bidder/model/bidder";
-import { toQueryString } from "@/shared/api";
+import { freshAccessToken } from "@/features/auth/lib/refresh";
 import { HUB_PATH, env } from "@/shared/config/env";
 
 import type { AuctionDetail } from "../model/auction";
@@ -16,6 +15,7 @@ import {
   type AuctionHubFactory,
   type HubEventMap,
   type HubEventName,
+  type HubIdentity,
 } from "./auction-hub";
 
 /**
@@ -24,27 +24,22 @@ import {
  */
 const RECONNECT_DELAYS_MS = [0, 2_000, 5_000, 10_000, 30_000];
 
-export function buildHubUrl(baseUrl: string, bidder: Bidder): string {
-  // With JWT auth these query parameters disappear and an
-  // `accessTokenFactory` takes their place — the event contract is unchanged.
-  return `${baseUrl}${HUB_PATH}${toQueryString({
-    bidderId: bidder.id,
-    bidderName: bidder.name,
-  })}`;
-}
-
-export const createSignalRAuctionHub: AuctionHubFactory = (
-  bidder: Bidder,
-): AuctionHub => {
+export const createSignalRAuctionHub: AuctionHubFactory = (): AuctionHub => {
   const connection = new HubConnectionBuilder()
-    .withUrl(
-      buildHubUrl(env.apiUrl, bidder),
-      env.skipNegotiation
+    .withUrl(`${env.apiUrl}${HUB_PATH}`, {
+      // The hub is [Authorize]d and a browser cannot set headers on the
+      // WebSocket handshake, so SignalR carries the token as
+      // `?access_token=`. Handing it a factory rather than a string matters:
+      // a connection is only authenticated while it is being established, so
+      // a reconnect must pick up the *current* token — refreshed first if the
+      // old one has run out while the room sat open.
+      accessTokenFactory: async () => (await freshAccessToken()) ?? "",
+      ...(env.skipNegotiation
         ? // No negotiate step, so it no longer matters which replica answers.
           // The cost is losing the SSE / long-polling fallbacks.
           { skipNegotiation: true, transport: HttpTransportType.WebSockets }
-        : {},
-    )
+        : null),
+    })
     .withAutomaticReconnect([...RECONNECT_DELAYS_MS])
     .configureLogging(
       env.isDevelopment ? LogLevel.Information : LogLevel.Warning,
@@ -58,9 +53,15 @@ export const createSignalRAuctionHub: AuctionHubFactory = (
     join: (auctionId) =>
       connection.invoke<AuctionDetail>(HUB_METHODS.joinAuction, auctionId),
 
+    leave: async (auctionId) => {
+      await connection.invoke(HUB_METHODS.leaveAuction, auctionId);
+    },
+
     placeBid: async (auctionId, amount) => {
       await connection.invoke(HUB_METHODS.placeBid, auctionId, amount);
     },
+
+    whoAmI: () => connection.invoke<HubIdentity>(HUB_METHODS.whoAmI),
 
     isConnected: () => connection.state === HubConnectionState.Connected,
 

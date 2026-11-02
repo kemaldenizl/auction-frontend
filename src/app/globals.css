@@ -3,74 +3,97 @@
 /*
  * Design tokens.
  *
- * Every colour is declared once here as a raw CSS variable, redefined for dark
- * mode, and then exposed to Tailwind through `@theme inline`. Components only
- * ever reference the semantic utility (`bg-surface`, `text-muted`,
- * `border-line`) so a palette change never touches a component file.
+ * Every colour is declared once as a raw CSS variable per theme and exposed to
+ * Tailwind through `@theme inline`. Components only reference the semantic
+ * utility (`bg-surface`, `text-muted`, `border-line`), so switching theme or
+ * palette never touches a component file.
+ *
+ * The theme lives in `data-theme` on <html>. An inline script in the root
+ * layout sets it before first paint, so there is no flash of the wrong theme.
  */
 
-:root {
-  --canvas: #f5f6f8;
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --canvas: #f6f6fa;
   --surface: #ffffff;
-  --surface-muted: #f0f2f5;
-  --line: #e3e6ea;
-  --line-strong: #c8ced7;
+  --surface-muted: #f1f1f7;
+  --surface-glass: rgb(255 255 255 / 0.72);
+  --line: #e7e7ef;
+  --line-strong: #d2d2de;
 
-  --fg: #0e1217;
-  --fg-muted: #586372;
-  --fg-subtle: #8a93a1;
+  --fg: #0d0d16;
+  --fg-muted: #575769;
+  --fg-subtle: #8d8d9f;
 
-  --brand: #4338ca;
-  --brand-hover: #3730a3;
+  --brand: #6d28d9;
+  --brand-2: #db2777;
+  --brand-hover: #5b21b6;
   --brand-fg: #ffffff;
-  --brand-soft: #eceafd;
+  --brand-soft: #f1eafe;
 
   --live: #e11d48;
   --live-soft: #ffe4ea;
   --success: #047857;
-  --success-soft: #d7f5e9;
+  --success-soft: #dcf7ea;
   --warning: #b45309;
-  --warning-soft: #fcefd6;
+  --warning-soft: #fdf0d5;
   --danger: #dc2626;
   --danger-soft: #fee2e2;
   --info: #0369a1;
   --info-soft: #ddf0fb;
+
+  --aurora-1: rgb(124 58 237 / 0.16);
+  --aurora-2: rgb(219 39 119 / 0.12);
+  --aurora-3: rgb(14 165 233 / 0.1);
+  --shadow: 240 30% 20%;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --canvas: #090a0e;
-    --surface: #12141a;
-    --surface-muted: #1a1d25;
-    --line: #262a33;
-    --line-strong: #3b414c;
+[data-theme="dark"] {
+  color-scheme: dark;
 
-    --fg: #f1f3f7;
-    --fg-muted: #99a2b1;
-    --fg-subtle: #697182;
+  --canvas: #07070c;
+  --surface: #0f0f17;
+  --surface-muted: #171721;
+  --surface-glass: rgb(15 15 23 / 0.7);
+  --line: #23232f;
+  --line-strong: #353544;
 
-    --brand: #8b93f8;
-    --brand-hover: #a5abfb;
-    --brand-fg: #0b0c14;
-    --brand-soft: #1d2043;
+  --fg: #f3f3f9;
+  --fg-muted: #a3a3b8;
+  --fg-subtle: #6e6e84;
 
-    --live: #fb7185;
-    --live-soft: #3d1522;
-    --success: #34d399;
-    --success-soft: #0d2c23;
-    --warning: #fbbf24;
-    --warning-soft: #342509;
-    --danger: #f87171;
-    --danger-soft: #3b1518;
-    --info: #38bdf8;
-    --info-soft: #0b2a3c;
-  }
+  --brand: #a78bfa;
+  --brand-2: #f472b6;
+  --brand-hover: #c4b5fd;
+  --brand-fg: #0c0715;
+  --brand-soft: #1f1636;
+
+  --live: #fb7185;
+  --live-soft: #3d1522;
+  --success: #34d399;
+  --success-soft: #0d2c23;
+  --warning: #fbbf24;
+  --warning-soft: #342509;
+  --danger: #f87171;
+  --danger-soft: #3b1518;
+  --info: #38bdf8;
+  --info-soft: #0b2a3c;
+
+  --aurora-1: rgb(139 92 246 / 0.22);
+  --aurora-2: rgb(236 72 153 / 0.14);
+  --aurora-3: rgb(56 189 248 / 0.1);
+  --shadow: 0 0% 0%;
 }
 
 @theme inline {
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
+  --color-surface-glass: var(--surface-glass);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
 
@@ -79,6 +102,7 @@
   --color-subtle: var(--fg-subtle);
 
   --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
   --color-brand-hover: var(--brand-hover);
   --color-brand-fg: var(--brand-fg);
   --color-brand-soft: var(--brand-soft);
@@ -97,10 +121,85 @@
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-  --radius-card: 0.875rem;
+  --radius-card: 1.25rem;
 
+  --shadow-card: 0 1px 2px hsl(var(--shadow) / 0.05),
+    0 8px 24px -12px hsl(var(--shadow) / 0.12);
+  --shadow-lift: 0 2px 4px hsl(var(--shadow) / 0.06),
+    0 24px 48px -16px hsl(var(--shadow) / 0.28);
+  --shadow-glow: 0 0 0 1px color-mix(in oklab, var(--brand) 35%, transparent),
+    0 12px 40px -12px color-mix(in oklab, var(--brand) 55%, transparent);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --animate-fade-up: fade-up 600ms var(--ease-out-expo) both;
+  --animate-fade-in: fade-in 400ms ease-out both;
+  --animate-scale-in: scale-in 320ms var(--ease-spring) both;
+  --animate-slide-in: slide-in 420ms var(--ease-out-expo) both;
+  --animate-price-pop: price-pop 700ms var(--ease-out-expo);
   --animate-price-flash: price-flash 900ms ease-out;
   --animate-live-pulse: live-pulse 1.6s ease-in-out infinite;
+  --animate-live-ring: live-ring 1.8s ease-out infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-gradient-pan: gradient-pan 8s ease-in-out infinite;
+  --animate-float: float 6s ease-in-out infinite;
+}
+
+/* ---- keyframes ---- */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes price-pop {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 @keyframes price-flash {
@@ -124,21 +223,161 @@
   }
 }
 
+@keyframes live-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--live) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes gradient-pan {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes aurora {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(6%, -4%, 0) scale(1.12);
+  }
+  100% {
+    transform: translate3d(-4%, 5%, 0) scale(0.96);
+  }
+}
+
+/* ---- reusable utilities ---- */
+
+@utility text-gradient {
+  background-image: linear-gradient(
+    110deg,
+    var(--brand),
+    var(--brand-2),
+    var(--brand)
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/*
+ * Fills carry white text, so they use deep tones in both themes; the lighter
+ * dark-theme `--brand` is for text and outlines on a dark background.
+ */
+@utility bg-gradient-brand {
+  background-image: linear-gradient(120deg, #6d28d9, #c026d3 55%, #db2777);
+}
+
+@utility glass {
+  background-color: var(--surface-glass);
+  backdrop-filter: saturate(1.6) blur(16px);
+  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+}
+
+/* Entrance delay for staggered lists: style={{ "--delay": "80ms" }}. */
+@utility stagger {
+  animation-delay: var(--delay, 0ms);
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
 @layer base {
+  html {
+    /* Theme changes cross-fade instead of snapping. */
+    transition: background-color 300ms ease, color 300ms ease;
+  }
+
   body {
     background-color: var(--canvas);
     color: var(--fg);
-  }
-
-  /* Tabular numerals keep prices and countdowns from jittering as they tick. */
-  .tabular {
-    font-variant-numeric: tabular-nums;
   }
 
   :focus-visible {
     outline: 2px solid var(--brand);
     outline-offset: 2px;
   }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--brand) 30%, transparent);
+  }
+
+  dialog::backdrop {
+    background: rgb(0 0 0 / 0.55);
+    backdrop-filter: blur(4px);
+    animation: fade-in 200ms ease-out;
+  }
+}
+
+/* The drifting gradient behind every page. Purely decorative. */
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.aurora::before,
+.aurora::after,
+.aurora > span {
+  content: "";
+  position: absolute;
+  width: 60vmax;
+  height: 60vmax;
+  border-radius: 9999px;
+  filter: blur(80px);
+  animation: aurora 22s ease-in-out infinite alternate;
+}
+
+.aurora::before {
+  top: -25vmax;
+  left: -15vmax;
+  background: var(--aurora-1);
+}
+
+.aurora::after {
+  top: -20vmax;
+  right: -20vmax;
+  background: var(--aurora-2);
+  animation-duration: 28s;
+  animation-direction: alternate-reverse;
+}
+
+.aurora > span {
+  bottom: -35vmax;
+  left: 20vmax;
+  background: var(--aurora-3);
+  animation-duration: 34s;
 }
 
 @media (prefers-reduced-motion: reduce) {

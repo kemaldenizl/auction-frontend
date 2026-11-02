@@ -1,57 +1,38 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Gavel, Package, Settings } from "lucide-react";
 
-import { cn } from "@/shared/lib/cn";
+import { useSession } from "@/features/auth/hooks/use-session";
+import { ADMIN_PERMISSIONS } from "@/features/auth/model/permissions";
+import { NavTabs, NavTabsFallback, type NavTabItem } from "@/shared/ui";
 
-const NAV_ITEMS = [
-  { href: "/auctions", label: "Açık arttırmalar" },
-  { href: "/products", label: "Ürünler" },
-] as const;
+const PUBLIC_ITEMS: NavTabItem[] = [
+  { href: "/auctions", label: "Açık artırmalar", icon: <Gavel /> },
+  { href: "/products", label: "Ürünler", icon: <Package /> },
+];
 
-function isActive(pathname: string | null, href: string): boolean {
-  if (pathname === null) return false;
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function NavList({ pathname }: { pathname: string | null }) {
-  return (
-    <nav aria-label="Ana menü" className="flex items-center gap-1">
-      {NAV_ITEMS.map(({ href, label }) => {
-        const active = isActive(pathname, href);
-
-        return (
-          <Link
-            key={href}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-              active
-                ? "bg-brand-soft text-brand"
-                : "text-muted hover:bg-surface-muted hover:text-fg",
-            )}
-          >
-            {label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
+const ADMIN_ITEM: NavTabItem = {
+  href: "/admin",
+  label: "Yönetim",
+  icon: <Settings />,
+};
 
 /**
- * Prerendered shell: the same links without a highlight.
+ * Prerendered shell: the public links with nothing highlighted.
  *
- * On a route with a dynamic param the pathname is not known at build time, so
- * `usePathname` suspends. This fallback keeps the header in the static shell
- * instead of making the whole route block on request data.
+ * `usePathname` is URL data, so on a route with a dynamic param it suspends.
+ * This fallback keeps the header in the static shell.
  */
 export function MainNavFallback() {
-  return <NavList pathname={null} />;
+  return <NavTabsFallback items={PUBLIC_ITEMS} label="Ana menü" />;
 }
 
 export function MainNav() {
-  return <NavList pathname={usePathname()} />;
+  const { canAny } = useSession();
+
+  const items = canAny(ADMIN_PERMISSIONS)
+    ? [...PUBLIC_ITEMS, ADMIN_ITEM]
+    : PUBLIC_ITEMS;
+
+  return <NavTabs items={items} label="Ana menü" />;
 }

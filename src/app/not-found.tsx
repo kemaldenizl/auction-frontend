@@ -1,20 +1,21 @@
+import { Compass } from "lucide-react";
 import Link from "next/link";
 
-import { EmptyState } from "@/shared/ui";
+import { EmptyState, buttonClassName } from "@/shared/ui";
 
 export default function NotFound() {
   return (
-    <EmptyState
-      title="Sayfa bulunamadı"
-      description="Aradığınız kayıt silinmiş ya da adres hatalı olabilir."
-      action={
-        <Link
-          href="/auctions"
-          className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-fg"
-        >
-          Açık arttırmalara dön
-        </Link>
-      }
-    />
+    <div className="mx-auto max-w-lg py-16">
+      <EmptyState
+        icon={<Compass />}
+        title="Sayfa bulunamadı"
+        description="Aradığınız sayfa kaldırılmış ya da adresi değişmiş olabilir."
+        action={
+          <Link href="/auctions" className={buttonClassName()}>
+            Açık artırmalara dön
+          </Link>
+        }
+      />
+    </div>
   );
 }

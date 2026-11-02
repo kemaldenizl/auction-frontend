@@ -1,21 +1,31 @@
+import { Ban, CalendarClock, Flag } from "lucide-react";
+import type { ReactNode } from "react";
+
 import { Badge, type BadgeTone } from "@/shared/ui";
 
 import type { AuctionStatus } from "../model/auction";
 
 const PRESENTATION: Record<
   AuctionStatus,
-  { label: string; tone: BadgeTone; pulse?: boolean }
+  { label: string; tone: BadgeTone; icon?: ReactNode; pulse?: boolean }
 > = {
-  Scheduled: { label: "Başlamadı", tone: "info" },
+  Scheduled: { label: "Yakında", tone: "info", icon: <CalendarClock /> },
   Live: { label: "Canlı", tone: "live", pulse: true },
-  Ended: { label: "Sona erdi", tone: "neutral" },
-  Cancelled: { label: "İptal", tone: "danger" },
+  Ended: { label: "Sona erdi", tone: "neutral", icon: <Flag /> },
+  Cancelled: { label: "İptal edildi", tone: "danger", icon: <Ban /> },
 };
 
-export function AuctionStatusBadge({ status }: { status: AuctionStatus }) {
-  const { label, tone, pulse } = PRESENTATION[status];
+export function AuctionStatusBadge({
+  status,
+  className,
+}: {
+  status: AuctionStatus;
+  className?: string;
+}) {
+  const { label, tone, icon, pulse } = PRESENTATION[status];
   return (
-    <Badge tone={tone} pulse={pulse}>
+    <Badge tone={tone} pulse={pulse} className={className}>
+      {icon}
       {label}
     </Badge>
   );

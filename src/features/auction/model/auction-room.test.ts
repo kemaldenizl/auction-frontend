@@ -51,6 +51,7 @@ describe("createInitialState", () => {
     expect(state).toMatchObject({
       auctionId: AUCTION_ID,
       auction: null,
+      viewer: null,
       bids: [],
       viewerCount: 0,
       connection: "connecting",
@@ -401,11 +402,25 @@ describe("selectors", () => {
     expect(canPlaceBid(ended)).toBe(false);
   });
 
-  it("recognises the leading bidder", () => {
-    const state = joinedState();
+  it("knows nothing about the lead until the hub says who we are", () => {
+    // The bidder is read from the access token by `WhoAmI`, not passed in.
+    expect(isLeading(joinedState())).toBe(false);
+  });
 
-    expect(isLeading(state, "u-alice")).toBe(true);
-    expect(isLeading(state, "u-bob")).toBe(false);
+  it("recognises the leading bidder once identified", () => {
+    const identified = reduce(joinedState(), {
+      type: "room/identified",
+      viewer: { id: "u-alice", name: "alice@example.com" },
+      at: AT,
+    });
+    const other = reduce(joinedState(), {
+      type: "room/identified",
+      viewer: { id: "u-bob", name: "bob@example.com" },
+      at: AT,
+    });
+
+    expect(isLeading(identified)).toBe(true);
+    expect(isLeading(other)).toBe(false);
   });
 
   it("counts down on the server's clock, not the device's", () => {

@@ -17,22 +17,32 @@ export function Container({
 }
 
 export function PageHeader({
+  eyebrow,
   title,
   description,
   action,
 }: {
+  /** Small label above the title — section name or context. */
+  eyebrow?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-4 pb-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">
+    <header className="flex animate-fade-up flex-wrap items-end justify-between gap-4 pb-8">
+      <div className="min-w-0">
+        {eyebrow && (
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand">
+            {eyebrow}
+          </p>
+        )}
+        <h1 className="text-3xl font-semibold tracking-tight text-fg sm:text-4xl">
           {title}
         </h1>
         {description && (
-          <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>
+          <p className="mt-2 max-w-2xl text-sm text-muted sm:text-base">
+            {description}
+          </p>
         )}
       </div>
       {action}
@@ -44,16 +54,19 @@ export function Stat({
   label,
   value,
   hint,
+  icon,
   className,
 }: {
   label: ReactNode;
   value: ReactNode;
   hint?: ReactNode;
+  icon?: ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn("min-w-0", className)}>
-      <dt className="text-xs font-medium uppercase tracking-wide text-subtle">
+      <dt className="flex items-center gap-1.5 text-xs font-medium text-subtle [&_svg]:size-3.5">
+        {icon}
         {label}
       </dt>
       <dd className="mt-1 truncate text-lg font-semibold tabular text-fg">

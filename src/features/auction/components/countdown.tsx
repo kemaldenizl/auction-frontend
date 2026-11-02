@@ -5,6 +5,8 @@ import { cn } from "@/shared/lib/cn";
 import { formatDuration } from "@/shared/lib/format";
 
 const PLACEHOLDER = "--:--";
+/** Below this the timer turns red, so the last minute reads as urgent. */
+const URGENT_MS = 60_000;
 
 /**
  * Counts down to a server timestamp.
@@ -28,9 +30,17 @@ export function Countdown({
   if (Number.isNaN(endsAt)) return null;
 
   const remaining = now === null ? null : Math.max(0, endsAt + offsetMs - now);
+  const urgent = remaining !== null && remaining > 0 && remaining < URGENT_MS;
 
   return (
-    <time dateTime={target} className={cn("tabular", className)}>
+    <time
+      dateTime={target}
+      className={cn(
+        "tabular transition-colors duration-500",
+        urgent && "text-live",
+        className,
+      )}
+    >
       {remaining === null ? PLACEHOLDER : formatDuration(remaining)}
     </time>
   );
